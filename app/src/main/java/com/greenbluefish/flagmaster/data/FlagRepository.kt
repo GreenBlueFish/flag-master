@@ -20,6 +20,25 @@ object FlagRepository {
     fun byCategories(set: Set<Category>): List<FlagEntry> =
         if (set.isEmpty()) emptyList() else everything.filter { it.category in set }
 
+    /** COUNTRY entries whose key falls in one of the selected [continents]. */
+    fun countriesByContinents(continents: Set<Continent>): List<FlagEntry> {
+        val keys = CountryContinents.keysFor(continents)
+        return CountryData.entries.filter { it.key in keys }
+    }
+
+    /**
+     * The quiz pool for the current selection: COUNTRY entries are scoped to the
+     * chosen [continents]; US and CANADA are included whole (never filtered by
+     * continent) when their category is selected.
+     */
+    fun poolFor(categories: Set<Category>, continents: Set<Continent>): List<FlagEntry> {
+        val result = ArrayList<FlagEntry>()
+        if (Category.COUNTRY in categories) result += countriesByContinents(continents)
+        if (Category.US in categories) result += UsData.entries
+        if (Category.CANADA in categories) result += CanadaData.entries
+        return result
+    }
+
     /** Exact, case-insensitive, trimmed name match used for scoring. */
     fun find(name: String): FlagEntry? {
         val needle = name.trim()

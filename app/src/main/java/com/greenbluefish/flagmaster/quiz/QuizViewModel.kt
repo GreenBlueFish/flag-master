@@ -6,6 +6,7 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import com.greenbluefish.flagmaster.data.Category
+import com.greenbluefish.flagmaster.data.Continent
 import com.greenbluefish.flagmaster.data.FlagEntry
 import com.greenbluefish.flagmaster.data.FlagRepository
 
@@ -13,19 +14,25 @@ import com.greenbluefish.flagmaster.data.FlagRepository
 enum class GuessResult { NONE, CORRECT, WRONG }
 
 /**
- * Drives the continuous quiz for a fixed set of [categories].
+ * Drives the continuous quiz for a fixed set of [categories], with COUNTRY
+ * entries scoped to the chosen [continents].
  *
- * The suggestion shown under the input is ALWAYS computed from
- * [FlagRepository.byCategories] over the selected [categories] only, so it can
- * never surface an unselected category. It is display-only: [onSubmit] scores
- * the fully typed, trimmed, case-insensitive input against the current answer
- * and never reads the suggestion. A wrong guess is re-queued min(queue.size, 5)
- * positions ahead so the same flag never reappears immediately.
+ * The suggestion shown under the input is display-only: [onSubmit] scores the
+ * fully typed, trimmed, case-insensitive input against the current answer and
+ * never reads the suggestion. When [matchSelectionOnly] is true the suggestion
+ * is drawn from the selected [pool] only (never surfacing an unselected
+ * category); when false it is drawn from the whole flag set for a harder spell
+ * challenge. A wrong guess is re-queued min(queue.size, 5) positions ahead so
+ * the same flag never reappears immediately.
  */
-class QuizViewModel(private val categories: Set<Category>) : ViewModel() {
+class QuizViewModel(
+    private val categories: Set<Category>,
+    private val continents: Set<Continent>,
+    private val matchSelectionOnly: Boolean,
+) : ViewModel() {
 
-    /** The pool backing both the queue and the fuzzy suggestion. Selected only. */
-    private val pool: List<FlagEntry> = FlagRepository.byCategories(categories)
+    /** The pool backing both the queue and (when scoped) the fuzzy suggestion. */
+    private val pool: List<FlagEntry> = FlagRepository.poolFor(categories, continents)
 
     private val queue: ArrayDeque<FlagEntry> = ArrayDeque(pool.shuffled())
 
@@ -58,9 +65,12 @@ class QuizViewModel(private val categories: Set<Category>) : ViewModel() {
         advance()
     }
 
-    /** Display-only nearest match from the SELECTED pool; never autofilled. */
+    /**
+     * Display-only nearest match; never autofilled. Scoped to the selected
+     * [pool] when [matchSelectionOnly] is true, otherwise drawn from every flag.
+     */
     val suggestion: FlagEntry?
-        get() = FuzzyMatcher.closest(input, pool)
+        get() = FuzzyMatcher.closest(input, if (matchSelectionOnly) pool else FlagRepository.all())
 
     fun onInputChange(value: String) {
         input = value
@@ -120,11 +130,16 @@ class QuizViewModel(private val categories: Set<Category>) : ViewModel() {
     val total: Int get() = totalCount
 }
 
-/** Builds a [QuizViewModel] seeded with the chosen [categories]. */
+/**
+ * Builds a [QuizViewModel] seeded with the chosen [categories], the COUNTRY
+ * [continents] scope, and the [matchSelectionOnly] suggestion switch.
+ */
 class QuizViewModelFactory(
     private val categories: Set<Category>,
+    private val continents: Set<Continent>,
+    private val matchSelectionOnly: Boolean,
 ) : ViewModelProvider.Factory {
     @Suppress("UNCHECKED_CAST")
     override fun <T : ViewModel> create(modelClass: Class<T>): T =
-        QuizViewModel(categories) as T
+        QuizViewModel(categories, continents, matchSelectionOnly) as T
 }
