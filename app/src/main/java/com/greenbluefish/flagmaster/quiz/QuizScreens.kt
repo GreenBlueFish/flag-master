@@ -11,7 +11,9 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
@@ -73,6 +75,12 @@ fun QuizSetupScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
+                // Single screen-level scroll container so all category toggles,
+                // the expanded six-continent list, the fuzzy-scope switch, and
+                // the Start/Back buttons are reachable on S21 portrait. The
+                // ContinentSelector below is a plain non-scrolling Column, so
+                // there is no nested vertical-scroll conflict. Mirrors DetailScreen.
+                .verticalScroll(rememberScrollState())
                 .padding(24.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
