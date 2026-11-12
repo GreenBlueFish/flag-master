@@ -31,7 +31,12 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
@@ -258,7 +263,7 @@ private fun CategoryToggle(
  * autofills, never scored), and a Guess button. Correct = green, wrong = red
  * with the answer revealed. Advances to [onComplete] when the queue empties.
  */
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalComposeUiApi::class)
 @Composable
 fun QuizScreen(
     viewModel: QuizViewModel,
@@ -272,8 +277,42 @@ fun QuizScreen(
     val current = viewModel.current ?: return
 
     // Resets to the flag (false) on every new/re-queued entry, keyed by the
-    // entry so the map (which reveals the answer) is never shown first.
+    // entry so the map (which reveals the answer) is never shown first. This
+    // keying also makes tap-to-flip work during ANSWERED and reset to flag on
+    // the next question.
     var showMap by remember(current.key) { mutableStateOf(false) }
+
+    // Keyboard + focus control. LocalSoftwareKeyboardController is nullable, so
+    // every call is a safe call. The field is disabled during ANSWERED so the
+    // user reads the result; Continue re-focuses and re-shows the keyboard.
+    val keyboard = LocalSoftwareKeyboardController.current
+    val focusManager = LocalFocusManager.current
+    val focusRequester = remember { FocusRequester() }
+    val answered = viewModel.lastResult != GuessResult.NONE
+
+    // Both submit paths (IME Done + Guess button) run the same logic: hide the
+    // keyboard, drop focus, then score via the ViewModel (which enters ANSWERED
+    // without advancing).
+    val submit = {
+        keyboard?.hide()
+        focusManager.clearFocus()
+        viewModel.onSubmit()
+    }
+
+    // Re-show the keyboard only on a NEW question (ASKING). Keyed on the current
+    // entry so it fires per flag; the `== NONE` guard means it never re-shows
+    // during ANSWERED (when lastResult flips to CORRECT/WRONG the effect re-runs
+    // but hits the guard and does nothing). The try/catch guards requesting
+    // focus before the field is attached/composed.
+    LaunchedEffect(current.key, viewModel.lastResult) {
+        if (viewModel.lastResult == GuessResult.NONE) {
+            try {
+                focusRequester.requestFocus()
+            } catch (_: IllegalStateException) {
+            }
+            keyboard?.show()
+        }
+    }
 
     Scaffold { padding ->
         Box(
@@ -324,53 +363,85 @@ fun QuizScreen(
                     onValueChange = viewModel::onInputChange,
                     label = { Text("Type the full name") },
                     singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
+                    // Disabled (read-only) during ANSWERED so the typed guess
+                    // stays visible while the user reads the result.
+                    enabled = !answered,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .focusRequester(focusRequester),
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-                    keyboardActions = KeyboardActions(onDone = { viewModel.onSubmit() }),
+                    keyboardActions = KeyboardActions(onDone = { submit() }),
                 )
 
-                // Exactly ONE suggestion, rendered as a hint only. Never used on submit.
-                val suggestion = viewModel.suggestion
-                Text(
-                    text = if (suggestion != null) "Closest match: ${suggestion.name}" else " ",
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.fillMaxWidth(),
-                )
+                // Exactly ONE suggestion, rendered as a hint only. Never used on
+                // submit, and hidden entirely during ANSWERED so feedback is clear.
+                if (!answered) {
+                    val suggestion = viewModel.suggestion
+                    Text(
+                        text = if (suggestion != null) "Closest match: ${suggestion.name}" else " ",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                } else {
+                    Spacer(Modifier.height(0.dp))
+                }
 
+                // Feedback phase: plain-text/Unicode correct-or-incorrect marker
+                // plus the correct name ALWAYS, so the user learns the flag.
                 when (viewModel.lastResult) {
                     GuessResult.CORRECT -> Text(
-                        text = "Correct!",
+                        text = "\u2713 Correct",
                         color = CorrectGreen,
                         fontWeight = FontWeight.Bold,
                         style = MaterialTheme.typography.titleLarge,
                     )
                     GuessResult.WRONG -> Text(
-                        text = "Wrong — it was ${viewModel.revealedAnswer}",
+                        text = "\u2717 Incorrect",
                         color = WrongRed,
                         fontWeight = FontWeight.Bold,
                         style = MaterialTheme.typography.titleLarge,
                     )
                     GuessResult.NONE -> Spacer(Modifier.height(0.dp))
                 }
-
-                Button(
-                    onClick = { viewModel.onSubmit() },
-                    enabled = viewModel.input.isNotBlank(),
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Text("Guess")
+                if (answered) {
+                    Text(
+                        text = "Answer: ${viewModel.revealedAnswer}",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
                 }
 
-                // One-step back to the previous flag. Disabled (greyed) when
-                // there is no history: on the first question, or after already
-                // stepping back once (the slot is consumed until the next submit).
-                Button(
-                    onClick = { viewModel.goBack() },
-                    enabled = viewModel.canGoBack,
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Text("Back")
+                if (!answered) {
+                    Button(
+                        onClick = { submit() },
+                        enabled = viewModel.input.isNotBlank(),
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text("Guess")
+                    }
+
+                    // One-step back to the previous flag. Disabled (greyed) when
+                    // there is no history: on the first question, after stepping
+                    // back once, or while in the ANSWERED phase (canGoBack is
+                    // false then). Only reachable in ASKING.
+                    Button(
+                        onClick = { viewModel.goBack() },
+                        enabled = viewModel.canGoBack,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text("Back")
+                    }
+                } else {
+                    // ANSWERED: the only advance control. Performs the deferred
+                    // queue advance / wrong re-queue exactly once.
+                    Button(
+                        onClick = { viewModel.onContinue() },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text("Continue")
+                    }
                 }
             }
 

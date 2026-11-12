@@ -54,7 +54,11 @@ class QuizViewModel(
     var lastResult by mutableStateOf(GuessResult.NONE)
         private set
 
-    /** The answer revealed after a wrong guess (null while awaiting input). */
+    /**
+     * The correct answer name to reveal during the ANSWERED/feedback phase.
+     * Set on BOTH correct and wrong submits so the user always learns the name;
+     * null while in the ASKING phase (awaiting input).
+     */
     var revealedAnswer by mutableStateOf<String?>(null)
         private set
 
@@ -81,8 +85,14 @@ class QuizViewModel(
      */
     private var previous by mutableStateOf<QuizSnapshot?>(null)
 
-    /** Drives the Back button's enabled state. */
-    val canGoBack: Boolean get() = previous != null
+    /**
+     * Drives the Back button's enabled state. Back is only offered in the
+     * ASKING phase (lastResult == NONE): during ANSWERED the user's only action
+     * is Continue, and because the wrong-answer re-queue is deferred to
+     * [onContinue], the snapshot captured at submit is still a faithful
+     * pre-submit state that [goBack] can restore wholesale.
+     */
+    val canGoBack: Boolean get() = previous != null && lastResult == GuessResult.NONE
 
     init {
         advance()
@@ -96,27 +106,33 @@ class QuizViewModel(
         get() = FuzzyMatcher.closest(input, if (matchSelectionOnly) pool else FlagRepository.all())
 
     fun onInputChange(value: String) {
+        // Pure assignment: feedback is cleared only by onContinue()/goBack().
+        // The field is disabled during ANSWERED, so this never fires then, and
+        // keeping it a single statement means lastResult has exactly one setter
+        // on the submit side (onSubmit) and one clear side (onContinue/goBack).
         input = value
-        // Typing clears a prior reveal so the hint and field feel live again.
-        if (lastResult != GuessResult.NONE) {
-            lastResult = GuessResult.NONE
-            revealedAnswer = null
-        }
     }
 
     /**
-     * Scores the fully typed input. Exact (trimmed, case-insensitive) match to
-     * the current answer => correct, pop and advance. Otherwise wrong: reveal
-     * the answer and re-queue the current entry min(queue.size, 5) ahead.
+     * Scores the fully typed input and enters the ANSWERED/feedback phase WITHOUT
+     * advancing. Exact (trimmed, case-insensitive) match to the current answer =>
+     * correct (score++); otherwise wrong. In BOTH cases the correct name is
+     * revealed so the user learns it, and the flag STAYS on screen until
+     * [onContinue]. The queue is NOT mutated here: the wrong-answer re-queue and
+     * the advance both happen exactly once in [onContinue].
+     *
+     * Scoring happens exactly once per question, here, in the correct branch.
      */
     fun onSubmit() {
         val entry = current ?: return
         if (input.isBlank()) return
+        // Ignore a stray resubmit while already showing feedback.
+        if (lastResult != GuessResult.NONE) return
 
-        // Capture the single-step history BEFORE any scoring/queue mutation, so
-        // a later goBack() restores the exact state the user saw for this flag.
-        // A blank submit no-ops above and never captures. This is the ONLY
-        // capture site, which is what makes history exactly one level deep.
+        // Capture the single-step history BEFORE any scoring, so a later
+        // goBack() restores the exact pre-submit state the user saw for this
+        // flag. This is the ONLY capture site, which is what makes history
+        // exactly one level deep.
         previous = QuizSnapshot(
             entry = entry,
             score = score,
@@ -124,26 +140,46 @@ class QuizViewModel(
         )
 
         // Score against the current answer ONLY (never the suggestion).
-        val isCorrect = input.trim().equals(current!!.name, ignoreCase = true)
+        val isCorrect = input.trim().equals(entry.name, ignoreCase = true)
         if (isCorrect) {
             score++
             lastResult = GuessResult.CORRECT
-            revealedAnswer = null
-            advance()
         } else {
             lastResult = GuessResult.WRONG
-            revealedAnswer = current!!.name
-            // Re-insert ahead, never at position 0 (never immediately next).
-            val index = minOf(queue.size, 5)
-            queue.add(index, entry)
-            advance(resetFeedback = false)
         }
+        // Reveal the correct name in BOTH cases so the user can learn the flag.
+        revealedAnswer = entry.name
     }
 
     /**
-     * Steps back ONE flag to the previous question. Restores the EXACT
+     * Leaves the ANSWERED/feedback phase and advances to the next flag. Performs
+     * the deferred queue work EXACTLY ONCE: on a wrong answer the current entry
+     * is re-queued min(queue.size, 5) positions ahead (never position 0, so it
+     * never reappears immediately), then [advance] pulls the next entry (or
+     * completes the quiz). No-op while in ASKING so a stray double-tap cannot
+     * advance or re-queue twice. Does NOT score — scoring already happened once
+     * in [onSubmit].
+     */
+    fun onContinue() {
+        if (lastResult == GuessResult.NONE) return
+        val entry = current ?: return
+        if (lastResult == GuessResult.WRONG) {
+            // Re-insert ahead, never at position 0 (never immediately next).
+            val index = minOf(queue.size, 5)
+            queue.add(index, entry)
+        }
+        // advance() clears input, resets feedback to NONE, and pulls the next
+        // entry (or sets isComplete when the queue is empty) — the ASKING reset.
+        advance()
+    }
+
+    /**
+     * Steps back ONE flag to the previous question. Only reachable in ASKING
+     * (see [canGoBack]), i.e. after an [onContinue] advanced to a fresh flag,
+     * so the queue has already moved past the snapshot. Restores the EXACT
      * pre-submit state captured in [previous]: the queue is replaced wholesale
-     * (undoing both the removeFirst of advance and any wrong-answer re-insert),
+     * (undoing the removeFirst of advance and, if the previous answer was wrong,
+     * the re-insert that onContinue performed),
      * the score is restored (not decremented, so it can never double-count or
      * go negative), the input is cleared, and any reveal is cleared. The slot
      * is then consumed (previous = null) so a second immediate back is disabled
