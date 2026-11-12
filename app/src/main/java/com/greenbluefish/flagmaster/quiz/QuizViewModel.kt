@@ -61,6 +61,29 @@ class QuizViewModel(
     var isComplete by mutableStateOf(false)
         private set
 
+    /**
+     * One-deep history for the "Back" button. A snapshot captures the EXACT
+     * pre-submit state of the question the user last saw: the on-screen entry,
+     * the score as it stood while that flag was shown, and a full copy of the
+     * queue as it was then.
+     */
+    private data class QuizSnapshot(
+        val entry: FlagEntry,
+        val score: Int,
+        val queueSnapshot: List<FlagEntry>,
+    )
+
+    /**
+     * The single history slot (null = nothing to go back to). Captured at the
+     * TOP of [onSubmit] before any scoring/mutation, and CONSUMED (set null) by
+     * [goBack]. Storing exactly one snapshot — never a stack — guarantees only
+     * one level of history.
+     */
+    private var previous by mutableStateOf<QuizSnapshot?>(null)
+
+    /** Drives the Back button's enabled state. */
+    val canGoBack: Boolean get() = previous != null
+
     init {
         advance()
     }
@@ -90,6 +113,16 @@ class QuizViewModel(
         val entry = current ?: return
         if (input.isBlank()) return
 
+        // Capture the single-step history BEFORE any scoring/queue mutation, so
+        // a later goBack() restores the exact state the user saw for this flag.
+        // A blank submit no-ops above and never captures. This is the ONLY
+        // capture site, which is what makes history exactly one level deep.
+        previous = QuizSnapshot(
+            entry = entry,
+            score = score,
+            queueSnapshot = queue.toList(),
+        )
+
         // Score against the current answer ONLY (never the suggestion).
         val isCorrect = input.trim().equals(current!!.name, ignoreCase = true)
         if (isCorrect) {
@@ -105,6 +138,33 @@ class QuizViewModel(
             queue.add(index, entry)
             advance(resetFeedback = false)
         }
+    }
+
+    /**
+     * Steps back ONE flag to the previous question. Restores the EXACT
+     * pre-submit state captured in [previous]: the queue is replaced wholesale
+     * (undoing both the removeFirst of advance and any wrong-answer re-insert),
+     * the score is restored (not decremented, so it can never double-count or
+     * go negative), the input is cleared, and any reveal is cleared. The slot
+     * is then consumed (previous = null) so a second immediate back is disabled
+     * until the user submits again and captures a fresh snapshot.
+     *
+     * Because QuizScreen keys its tap-to-flip `showMap` on `current.key`,
+     * restoring `current` to the previous entry resets the flip to FLAG-first
+     * automatically — do not remove that keying or back would show the map.
+     */
+    fun goBack() {
+        val snap = previous ?: return
+        queue.clear()
+        queue.addAll(snap.queueSnapshot)
+        current = snap.entry
+        score = snap.score
+        remaining = queue.size + 1
+        input = ""
+        lastResult = GuessResult.NONE
+        revealedAnswer = null
+        isComplete = false
+        previous = null
     }
 
     /** Pull the next entry off the queue, or finish when the queue empties. */

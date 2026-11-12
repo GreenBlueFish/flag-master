@@ -361,6 +361,17 @@ fun QuizScreen(
                 ) {
                     Text("Guess")
                 }
+
+                // One-step back to the previous flag. Disabled (greyed) when
+                // there is no history: on the first question, or after already
+                // stepping back once (the slot is consumed until the next submit).
+                Button(
+                    onClick = { viewModel.goBack() },
+                    enabled = viewModel.canGoBack,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text("Back")
+                }
             }
 
             ScoreBadge(
