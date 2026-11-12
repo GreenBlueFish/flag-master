@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--
+      Base theme used before Compose takes over. Material 3 colors are supplied by the
+      Compose theme at runtime; this theme only controls the splash/window background so
+      there is no flash of an unstyled system theme on launch.
+    -->
+    <style name="Theme.FlagMaster" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">@color/white</item>
+        <item name="android:statusBarColor">@color/ic_launcher_background</item>
+    </style>
+</resources>

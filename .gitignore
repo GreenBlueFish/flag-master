@@ -1,0 +1,29 @@
+# Gradle / build outputs
+/build
+**/build/
+.gradle/
+
+# Local configuration
+local.properties
+
+# Android Studio / IntelliJ
+.idea/
+*.iml
+captures/
+
+# NDK
+.externalNativeBuild
+.cxx
+
+# OS
+.DS_Store
+
+# Planning / workflow artifacts (not part of the app build)
+.agents/
+
+# Keep the Gradle wrapper jar (CI needs it)
+!gradle/wrapper/gradle-wrapper.jar
+
+# Keep committed app assets (flag PNGs + world map)
+!app/src/main/assets/
+!app/src/main/assets/**
