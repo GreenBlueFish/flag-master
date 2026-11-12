@@ -26,6 +26,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.greenbluefish.flagmaster.data.Category
+import com.greenbluefish.flagmaster.data.Continent
 import com.greenbluefish.flagmaster.explore.DetailScreen
 import com.greenbluefish.flagmaster.explore.ExploreScreen
 import com.greenbluefish.flagmaster.quiz.QuizCompleteScreen
@@ -58,6 +59,8 @@ fun NavGraph() {
     // own remembered scope; selected categories flow setup -> quiz, and the
     // final score flows quiz -> completion.
     var selectedCategories by remember { mutableStateOf<Set<Category>>(emptySet()) }
+    var selectedContinents by remember { mutableStateOf<Set<Continent>>(emptySet()) }
+    var matchSelectionOnly by remember { mutableStateOf(true) }
     var finalScore by remember { mutableStateOf(0) }
     var finalTotal by remember { mutableStateOf(0) }
 
@@ -71,8 +74,10 @@ fun NavGraph() {
 
         composable(Routes.QUIZ_SETUP) {
             QuizSetupScreen(
-                onStart = { categories ->
+                onStart = { categories, continents, matchOnly ->
                     selectedCategories = categories
+                    selectedContinents = continents
+                    matchSelectionOnly = matchOnly
                     navController.navigate(Routes.QUIZ)
                 },
                 onBack = { navController.popBackStack() },
@@ -85,7 +90,11 @@ fun NavGraph() {
                 navController.popBackStack(Routes.QUIZ_SETUP, inclusive = false)
             } else {
                 val vm: QuizViewModel = viewModel(
-                    factory = QuizViewModelFactory(selectedCategories),
+                    factory = QuizViewModelFactory(
+                        selectedCategories,
+                        selectedContinents,
+                        matchSelectionOnly,
+                    ),
                 )
                 QuizScreen(
                     viewModel = vm,
