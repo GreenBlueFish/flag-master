@@ -24,13 +24,20 @@ import androidx.compose.ui.unit.dp
 /**
  * Offline world map with a single pin at [lat]/[lon].
  *
- * The map is `assets/world_map.png`, a clean equirectangular (plate carrée)
- * projection drawn at a fixed 2:1 aspect inside a [Box]. The Box width drives
- * the height exactly (height = width / 2) and the image fills that rect with
- * ContentScale.FillBounds, so there is NO letterbox offset and the pin maps
- * straight onto the drawn rect with:
+ * The map is `assets/world_map.png`, a verified FULL-EXTENT equirectangular
+ * (plate carrée) projection that spans exactly lon -180..180 and lat +90..-90
+ * at an exact 2:1 ratio (CC0 Blankmap.svg, rendered 3840x1920). Because the
+ * image is true full-extent 2:1, drawing it at a fixed 2:1 aspect inside a
+ * [Box] with ContentScale.FillBounds introduces NO distortion and NO letterbox
+ * offset, so the plain linear mapping is exact and the pin lands straight onto
+ * the drawn rect with:
  *   x = (lon + 180) / 360 * width
  *   y = (90 - lat) / 180 * height
+ *
+ * (The earlier BlankMap-World.svg was NOT full-extent — it cropped Antarctica
+ * and was non-2:1 — so this same formula pushed high-latitude pins like Alaska
+ * too far south. Swapping to the full-extent image fixes that WITHOUT changing
+ * any FlagEntry lat/lon data or this formula.)
  */
 @Composable
 fun MapView(

@@ -7,7 +7,13 @@
     Sources:
       Country + US  : https://flagcdn.com/w320/<code>.png
       Canada        : https://commons.wikimedia.org/wiki/Special:FilePath/<Flag_of_Name>.svg?width=320
-      World map     : https://commons.wikimedia.org/wiki/Special:FilePath/BlankMap-World.svg?width=2048
+      World map     : https://commons.wikimedia.org/wiki/Special:FilePath/Blankmap.svg?width=2048
+                      (CC0 1.0 Public Domain; full-extent equirectangular /
+                       plate carree spanning lon -180..180, lat +90..-90 at an
+                       exact 2:1 ratio -> renders 3840x1920. Replaces the older
+                       BlankMap-World.svg, which was NOT full-extent (cropped
+                       Antarctica, non-2:1) and made high-latitude pins such as
+                       Alaska land too far south.)
 
     Every file is verified non-empty and starts with the PNG magic bytes
     0x89 0x50 0x4E 0x47. Any failure is deleted and reported. Windows PowerShell.
@@ -143,7 +149,7 @@ foreach ($key in $canada.Keys) {
 # World map
 $mapDest = Join-Path $assetsDir 'world_map.png'
 try {
-    Invoke-WebRequest -Uri 'https://commons.wikimedia.org/wiki/Special:FilePath/BlankMap-World.svg?width=2048' -OutFile $mapDest -UseBasicParsing -TimeoutSec 120
+    Invoke-WebRequest -Uri 'https://commons.wikimedia.org/wiki/Special:FilePath/Blankmap.svg?width=2048' -OutFile $mapDest -UseBasicParsing -TimeoutSec 120
     if (Test-PngMagic -Path $mapDest) {
         Write-Host "ok   world_map.png ($((Get-Item $mapDest).Length) bytes)"
     } else {
