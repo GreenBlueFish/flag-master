@@ -29,6 +29,7 @@ import com.greenbluefish.flagmaster.data.Category
 import com.greenbluefish.flagmaster.data.Continent
 import com.greenbluefish.flagmaster.explore.DetailScreen
 import com.greenbluefish.flagmaster.explore.ExploreScreen
+import com.greenbluefish.flagmaster.quiz.HintMode
 import com.greenbluefish.flagmaster.quiz.QuizCompleteScreen
 import com.greenbluefish.flagmaster.quiz.QuizScreen
 import com.greenbluefish.flagmaster.quiz.QuizSetupScreen
@@ -60,7 +61,7 @@ fun NavGraph() {
     // final score flows quiz -> completion.
     var selectedCategories by remember { mutableStateOf<Set<Category>>(emptySet()) }
     var selectedContinents by remember { mutableStateOf<Set<Continent>>(emptySet()) }
-    var matchSelectionOnly by remember { mutableStateOf(true) }
+    var hintMode by remember { mutableStateOf(HintMode.SELECTION) }
     var finalScore by remember { mutableStateOf(0) }
     var finalTotal by remember { mutableStateOf(0) }
 
@@ -74,10 +75,10 @@ fun NavGraph() {
 
         composable(Routes.QUIZ_SETUP) {
             QuizSetupScreen(
-                onStart = { categories, continents, matchOnly ->
+                onStart = { categories, continents, mode ->
                     selectedCategories = categories
                     selectedContinents = continents
-                    matchSelectionOnly = matchOnly
+                    hintMode = mode
                     navController.navigate(Routes.QUIZ)
                 },
                 onBack = { navController.popBackStack() },
@@ -93,7 +94,7 @@ fun NavGraph() {
                     factory = QuizViewModelFactory(
                         selectedCategories,
                         selectedContinents,
-                        matchSelectionOnly,
+                        hintMode,
                     ),
                 )
                 QuizScreen(

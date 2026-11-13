@@ -21,6 +21,9 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
@@ -55,19 +58,20 @@ import com.greenbluefish.flagmaster.ui.theme.WrongRed
  * When Countries is on, a continent sub-selector appears (all six by default)
  * with a Select-all control; turning off the last continent turns Countries
  * off and hides the selector, and re-enabling Countries resets to all six. A
- * global fuzzy-scope Switch controls whether the spelling hint is drawn from
- * the selected pool (on) or every flag (off). Start is enabled only when the
- * effective pool is non-empty; it then hands the three values to [onStart].
+ * three-way spelling-hint selector ([HintMode]) controls whether the hint is
+ * drawn from the selected pool (Selection), every flag (All), or hidden
+ * entirely (Off). Start is enabled only when the effective pool is non-empty;
+ * it then hands the three values to [onStart].
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun QuizSetupScreen(
-    onStart: (Set<Category>, Set<Continent>, Boolean) -> Unit,
+    onStart: (Set<Category>, Set<Continent>, HintMode) -> Unit,
     onBack: () -> Unit,
 ) {
     var selected by remember { mutableStateOf(setOf<Category>()) }
     var selectedContinents by remember { mutableStateOf(Continent.entries.toSet()) }
-    var matchSelectionOnly by remember { mutableStateOf(true) }
+    var hintMode by remember { mutableStateOf(HintMode.SELECTION) }
 
     val canStart = (Category.COUNTRY in selected && selectedContinents.isNotEmpty()) ||
         Category.US in selected ||
@@ -137,15 +141,15 @@ fun QuizSetupScreen(
                 }
             }
 
-            FuzzyScopeToggle(
-                matchSelectionOnly = matchSelectionOnly,
-                onCheckedChange = { matchSelectionOnly = it },
+            HintModeSelector(
+                hintMode = hintMode,
+                onHintModeChange = { hintMode = it },
             )
 
             Spacer(Modifier.height(8.dp))
 
             Button(
-                onClick = { onStart(selected, selectedContinents, matchSelectionOnly) },
+                onClick = { onStart(selected, selectedContinents, hintMode) },
                 enabled = canStart,
                 modifier = Modifier.fillMaxWidth(),
             ) {
@@ -214,30 +218,46 @@ private fun ContinentCheckboxRow(
     }
 }
 
-/** Global switch controlling the spelling-hint scope. */
+/**
+ * Three-way spelling-hint selector. Selection = hint from the chosen pool,
+ * All = hint from every flag (tougher), Off = no hint at all.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun FuzzyScopeToggle(
-    matchSelectionOnly: Boolean,
-    onCheckedChange: (Boolean) -> Unit,
+private fun HintModeSelector(
+    hintMode: HintMode,
+    onHintModeChange: (HintMode) -> Unit,
 ) {
-    androidx.compose.foundation.layout.Row(
+    Column(
         modifier = Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = "Spelling hint matches your selection",
-                style = MaterialTheme.typography.titleMedium,
-            )
-            Text(
-                text = "Turn off for a tougher hint drawn from every flag.",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+        Text(
+            text = "Spelling hint",
+            style = MaterialTheme.typography.titleMedium,
+        )
+        Text(
+            text = "Selection matches your picks, All draws from every flag, Off hides the hint.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+            HintMode.entries.forEachIndexed { index, mode ->
+                SegmentedButton(
+                    selected = mode == hintMode,
+                    onClick = { onHintModeChange(mode) },
+                    shape = SegmentedButtonDefaults.itemShape(index, HintMode.entries.size),
+                ) {
+                    Text(
+                        when (mode) {
+                            HintMode.SELECTION -> "Selection"
+                            HintMode.ALL -> "All"
+                            HintMode.OFF -> "Off"
+                        },
+                    )
+                }
+            }
         }
-        Spacer(Modifier.height(0.dp))
-        Switch(checked = matchSelectionOnly, onCheckedChange = onCheckedChange)
     }
 }
 

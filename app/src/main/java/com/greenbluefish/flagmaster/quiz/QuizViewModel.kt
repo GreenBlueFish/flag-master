@@ -14,21 +14,34 @@ import com.greenbluefish.flagmaster.data.FlagRepository
 enum class GuessResult { NONE, CORRECT, WRONG }
 
 /**
+ * Scope of the display-only spelling hint shown under the quiz input.
+ *
+ * - [SELECTION] (default): the nearest match is drawn from the selected quiz
+ *   pool only, so an unselected category is never surfaced.
+ * - [ALL]: the nearest match is drawn from the whole flag set for a tougher
+ *   spell challenge.
+ * - [OFF]: no hint at all; the matcher is never called and no suggestion is
+ *   shown regardless of input.
+ */
+enum class HintMode { SELECTION, ALL, OFF }
+
+/**
  * Drives the continuous quiz for a fixed set of [categories], with COUNTRY
  * entries scoped to the chosen [continents].
  *
  * The suggestion shown under the input is display-only: [onSubmit] scores the
  * fully typed, trimmed, case-insensitive input against the current answer and
- * never reads the suggestion. When [matchSelectionOnly] is true the suggestion
- * is drawn from the selected [pool] only (never surfacing an unselected
- * category); when false it is drawn from the whole flag set for a harder spell
- * challenge. A wrong guess is re-queued min(queue.size, 5) positions ahead so
- * the same flag never reappears immediately.
+ * never reads the suggestion. [hintMode] selects the suggestion scope:
+ * [HintMode.SELECTION] draws from the selected [pool] only (never surfacing an
+ * unselected category), [HintMode.ALL] draws from the whole flag set for a
+ * harder spell challenge, and [HintMode.OFF] shows no suggestion at all
+ * (the matcher is never called). A wrong guess is re-queued min(queue.size, 5)
+ * positions ahead so the same flag never reappears immediately.
  */
 class QuizViewModel(
     private val categories: Set<Category>,
     private val continents: Set<Continent>,
-    private val matchSelectionOnly: Boolean,
+    private val hintMode: HintMode,
 ) : ViewModel() {
 
     /** The pool backing both the queue and (when scoped) the fuzzy suggestion. */
@@ -99,11 +112,16 @@ class QuizViewModel(
     }
 
     /**
-     * Display-only nearest match; never autofilled. Scoped to the selected
-     * [pool] when [matchSelectionOnly] is true, otherwise drawn from every flag.
+     * Display-only nearest match; never autofilled. [HintMode.SELECTION] scopes
+     * it to the selected [pool], [HintMode.ALL] draws from every flag, and
+     * [HintMode.OFF] returns null WITHOUT calling the matcher so no hint shows.
      */
     val suggestion: FlagEntry?
-        get() = FuzzyMatcher.closest(input, if (matchSelectionOnly) pool else FlagRepository.all())
+        get() = when (hintMode) {
+            HintMode.OFF -> null
+            HintMode.SELECTION -> FuzzyMatcher.closest(input, pool)
+            HintMode.ALL -> FuzzyMatcher.closest(input, FlagRepository.all())
+        }
 
     fun onInputChange(value: String) {
         // Pure assignment: feedback is cleared only by onContinue()/goBack().
@@ -228,14 +246,15 @@ class QuizViewModel(
 
 /**
  * Builds a [QuizViewModel] seeded with the chosen [categories], the COUNTRY
- * [continents] scope, and the [matchSelectionOnly] suggestion switch.
+ * [continents] scope, and the [hintMode] spelling-hint mode (Selection / All /
+ * Off).
  */
 class QuizViewModelFactory(
     private val categories: Set<Category>,
     private val continents: Set<Continent>,
-    private val matchSelectionOnly: Boolean,
+    private val hintMode: HintMode,
 ) : ViewModelProvider.Factory {
     @Suppress("UNCHECKED_CAST")
     override fun <T : ViewModel> create(modelClass: Class<T>): T =
-        QuizViewModel(categories, continents, matchSelectionOnly) as T
+        QuizViewModel(categories, continents, hintMode) as T
 }
